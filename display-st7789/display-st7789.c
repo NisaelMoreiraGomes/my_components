@@ -8,13 +8,15 @@ static gpio_num_t blk_pin = GPIO_NUM_NC;
 
 static esp_err_t validate_pins(const gpio_num_t *pins, size_t count);
 static esp_err_t validate_miso_pin(const gpio_num_t pin);
+static esp_err_t free_panel_handle(void);
+static esp_err_t free_io_handle(void);
 
 esp_err_t display_init(const display_config_t *config)
 {
     if (!config)
         return ESP_ERR_INVALID_ARG;
 
-    esp_err_t error;
+    esp_err_t result;
 
     gpio_num_t pins[] = {
         config->mosi,
@@ -24,15 +26,15 @@ esp_err_t display_init(const display_config_t *config)
         config->rst,
         config->blk};
 
-    error = validate_pins(pins, sizeof(pins) / sizeof(pins[0]));
-    if (error != ESP_OK)
-        return error;
+    result = validate_pins(pins, sizeof(pins) / sizeof(pins[0]));
+    if (result != ESP_OK)
+        return result;
 
     blk_pin = config->blk;
 
-    error = validate_miso_pin(config->miso);
-    if (error != ESP_OK)
-        return error;
+    result = validate_miso_pin(config->miso);
+    if (result != ESP_OK)
+        return result;
 
     spi_bus_config_t buscfg = {
         .sclk_io_num = config->sclk,
@@ -43,9 +45,9 @@ esp_err_t display_init(const display_config_t *config)
         .max_transfer_sz = config->width * config->height * sizeof(uint16_t),
     };
 
-    error = spi_bus_initialize(config->host_id, &buscfg, SPI_DMA_CH_AUTO);
-    if (error != ESP_OK)
-        return error;
+    result = spi_bus_initialize(config->host_id, &buscfg, SPI_DMA_CH_AUTO);
+    if (result != ESP_OK)
+        return result;
 
     esp_lcd_panel_io_spi_config_t io_config = {
         .dc_gpio_num = config->dc,
@@ -59,10 +61,12 @@ esp_err_t display_init(const display_config_t *config)
         .user_ctx = NULL,
     };
 
-    error = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)config->host_id, &io_config, &io_handle);
-    if (error != ESP_OK)
-        // TODO: Free io_handle if esp_lcd_new_panel_io_spi() returns an error
-        return error;
+    result = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)config->host_id, &io_config, &io_handle);
+    if (result != ESP_OK)
+    {
+        free_io_handle();
+        return result;
+    }
 
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = config->rst,
@@ -73,75 +77,71 @@ esp_err_t display_init(const display_config_t *config)
         .bits_per_pixel = 16,
     };
 
-    error = esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle);
-    if (error != ESP_OK)
-        // TODO: Free panel_handle if esp_lcd_new_panel_st7789() returns an error
-        return error;
+    result = esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle);
+    if (result != ESP_OK)
+    {
+        free_panel_handle();
+        return result;
+    }
 
-    error = esp_lcd_panel_reset(panel_handle);
-    if (error != ESP_OK)
-        return error;
+    result = esp_lcd_panel_reset(panel_handle);
+    if (result != ESP_OK)
+        return result;
 
-    error = esp_lcd_panel_init(panel_handle);
-    if (error != ESP_OK)
-        return error;
+    result = esp_lcd_panel_init(panel_handle);
+    if (result != ESP_OK)
+        return result;
 
-    error = esp_lcd_panel_invert_color(panel_handle, config->is_inverted_color);
-    if (error != ESP_OK)
-        return error;
+    result = esp_lcd_panel_invert_color(panel_handle, config->is_inverted_color);
+    if (result != ESP_OK)
+        return result;
 
     if (config->is_horizontal)
     {
-        error = esp_lcd_panel_swap_xy(panel_handle, true);
-        if (error != ESP_OK)
-            return error;
+        result = esp_lcd_panel_swap_xy(panel_handle, true);
+        if (result != ESP_OK)
+            return result;
 
-        error = esp_lcd_panel_mirror(panel_handle, false, false);
-        if (error != ESP_OK)
-            return error;
+        result = esp_lcd_panel_mirror(panel_handle, false, false);
+        if (result != ESP_OK)
+            return result;
     }
 
-    error = esp_lcd_panel_set_gap(panel_handle, config->offset_x, config->offset_y);
-    if (error != ESP_OK)
-        return error;
+    result = esp_lcd_panel_set_gap(panel_handle, config->offset_x, config->offset_y);
+    if (result != ESP_OK)
+        return result;
 
-    error = esp_lcd_panel_disp_on_off(panel_handle, true);
-    if (error != ESP_OK)
-        return error;
+    result = esp_lcd_panel_disp_on_off(panel_handle, true);
+    if (result != ESP_OK)
+        return result;
 
-    error = gpio_reset_pin(blk_pin);
-    if (error != ESP_OK)
-        return error;
+    result = gpio_reset_pin(blk_pin);
+    if (result != ESP_OK)
+        return result;
 
-    error = gpio_set_direction(blk_pin, GPIO_MODE_OUTPUT);
-    if (error != ESP_OK)
-        return error;
+    result = gpio_set_direction(blk_pin, GPIO_MODE_OUTPUT);
+    if (result != ESP_OK)
+        return result;
 
-    display_backlight_on();
+    result = display_backlight_on();
+    if (result != ESP_OK)
+        return result;
 
     return ESP_OK;
 }
 
 esp_err_t display_deinit(void)
 {
-    // TODO: Preserve the first error encountered instead of overwriting it with cleanup results.
-    esp_err_t result = ESP_OK;
+    esp_err_t result_panel = free_panel_handle();
+    esp_err_t result_io = free_io_handle();
 
-    if (panel_handle)
-    {
-        result = esp_lcd_panel_del(panel_handle);
-        if (result == ESP_OK)
-            panel_handle = NULL;
-    }
+    if (result_panel != ESP_OK)
+        return result_panel;
 
-    if (io_handle)
-    {
-        result = esp_lcd_panel_io_del(io_handle);
-        if (result == ESP_OK)
-            io_handle = NULL;
-    }
+    if (result_io != ESP_OK)
+        return result_io;
 
-    return result;
+    return ESP_OK;
 }
 
 esp_err_t display_backlight_on(void)
@@ -198,4 +198,30 @@ static esp_err_t validate_miso_pin(const gpio_num_t pin)
         return ESP_OK;
 
     return GPIO_IS_VALID_GPIO(pin) ? ESP_OK : ESP_ERR_INVALID_ARG;
+}
+
+static esp_err_t free_panel_handle(void)
+{
+    esp_err_t result = ESP_OK;
+
+    if (panel_handle)
+    {
+        result = esp_lcd_panel_del(panel_handle);
+        panel_handle = NULL;
+    }
+
+    return result;
+}
+
+static esp_err_t free_io_handle(void)
+{
+    esp_err_t result = ESP_OK;
+
+    if (io_handle)
+    {
+        result = esp_lcd_panel_io_del(io_handle);
+        io_handle = NULL;
+    }
+
+    return result;
 }
