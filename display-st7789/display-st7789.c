@@ -102,7 +102,7 @@ esp_err_t display_init(const display_config_t *config)
         if (result != ESP_OK)
             return result;
 
-        result = esp_lcd_panel_mirror(panel_handle, false, false);
+        result = esp_lcd_panel_mirror(panel_handle, false, true);
         if (result != ESP_OK)
             return result;
     }
