@@ -1,6 +1,13 @@
 #include "display-st7789.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_ops.h"
+#include "driver/ledc.h"
+
+#define LEDC_MODE LEDC_LOW_SPEED_MODE
+#define LEDC_CHANNEL LEDC_CHANNEL_0
+#define LEDC_TIMER LEDC_TIMER_0
+#define LEDC_DUTY_RES LEDC_TIMER_8_BIT
+#define LEDC_FREQUENCY (5 * 1000)
 
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static esp_lcd_panel_io_handle_t io_handle = NULL;
@@ -115,11 +122,27 @@ esp_err_t display_init(const display_config_t *config)
     if (result != ESP_OK)
         return result;
 
-    result = gpio_reset_pin(blk_pin);
+    ledc_timer_config_t ledc_timer = {
+        .speed_mode = LEDC_MODE,
+        .timer_num = LEDC_TIMER,
+        .duty_resolution = LEDC_DUTY_RES,
+        .freq_hz = LEDC_FREQUENCY,
+        .clk_cfg = LEDC_AUTO_CLK};
+
+    result = ledc_timer_config(&ledc_timer);
     if (result != ESP_OK)
         return result;
 
-    result = gpio_set_direction(blk_pin, GPIO_MODE_OUTPUT);
+    ledc_channel_config_t ledc_channel = {
+        .speed_mode = LEDC_MODE,
+        .channel = LEDC_CHANNEL,
+        .timer_sel = LEDC_TIMER,
+        .intr_type = LEDC_INTR_DISABLE,
+        .gpio_num = blk_pin,
+        .duty = 0,
+        .hpoint = 0};
+
+    result = ledc_channel_config(&ledc_channel);
     if (result != ESP_OK)
         return result;
 
@@ -147,7 +170,7 @@ esp_err_t display_deinit(void)
 esp_err_t display_backlight_on(void)
 {
     if (blk_pin != GPIO_NUM_NC)
-        return gpio_set_level(blk_pin, 1);
+        return display_set_brightness(255);
 
     return ESP_ERR_INVALID_STATE;
 }
@@ -155,9 +178,23 @@ esp_err_t display_backlight_on(void)
 esp_err_t display_backlight_off(void)
 {
     if (blk_pin != GPIO_NUM_NC)
-        return gpio_set_level(blk_pin, 0);
+        return display_set_brightness(0);
 
     return ESP_ERR_INVALID_STATE;
+}
+
+esp_err_t display_set_brightness(uint8_t brightness)
+{
+    if (blk_pin == GPIO_NUM_NC)
+        return ESP_ERR_INVALID_STATE;
+
+    esp_err_t result;
+
+    result = ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, brightness);
+    if (result != ESP_OK)
+        return result;
+
+    return ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
 }
 
 esp_err_t display_draw_bitmap(int x_start, int y_start, int x_end, int y_end, const void *color_data)

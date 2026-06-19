@@ -170,6 +170,18 @@ extern "C"
     esp_err_t display_backlight_off(void);
 
     /**
+     * @brief Set the display backlight brightness.
+     *
+     * @param brightness Brightness value from 0 (off) to 255 (maximum).
+     *
+     * @return
+     *
+     *      - ESP_OK on success
+     *      - ESP_ERR_INVALID_STATE if backlight is not initialized
+     */
+    esp_err_t display_set_brightness(uint8_t brightness);
+
+    /**
      * @brief Draw a bitmap to the display.
      *
      * Transfers pixel data to the specified display area.
