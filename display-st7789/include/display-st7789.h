@@ -177,7 +177,7 @@ extern "C"
      * @return
      *
      *      - ESP_OK on success
-     *      - ESP_ERR_INVALID_STATE if backlight is not initialized
+     *      - An error code otherwise
      */
     esp_err_t display_set_brightness(uint8_t brightness);
 

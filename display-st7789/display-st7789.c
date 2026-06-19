@@ -169,18 +169,18 @@ esp_err_t display_deinit(void)
 
 esp_err_t display_backlight_on(void)
 {
-    if (blk_pin != GPIO_NUM_NC)
-        return display_set_brightness(255);
+    if (blk_pin == GPIO_NUM_NC)
+        return ESP_ERR_INVALID_STATE;
 
-    return ESP_ERR_INVALID_STATE;
+    return display_set_brightness(255);
 }
 
 esp_err_t display_backlight_off(void)
 {
-    if (blk_pin != GPIO_NUM_NC)
-        return display_set_brightness(0);
+    if (blk_pin == GPIO_NUM_NC)
+        return ESP_ERR_INVALID_STATE;
 
-    return ESP_ERR_INVALID_STATE;
+    return display_set_brightness(0);
 }
 
 esp_err_t display_set_brightness(uint8_t brightness)
