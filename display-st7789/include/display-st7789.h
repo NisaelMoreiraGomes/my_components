@@ -71,7 +71,7 @@ extern "C"
      * This structure contains all hardware and display parameters
      * required to initialize the display driver.
      */
-    typedef struct
+    typedef struct display_config_s
     {
         /** SPI host peripheral used by the display. */
         spi_host_device_t host_id;
